@@ -1,0 +1,18 @@
+[package]
+name    = "owl"
+version = "0.1.0"
+authors = ["Andrew 'workanator' Bashkatov"]
+edition = "2018"
+
+[profile.release]
+codegen-units = 1
+panic         = 'abort'
+lto           = true
+opt-level     = 'z'  # Optimize for size.
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+signal-hook = "^0.1"
+nix         = "^0.15"
+siquery     = "1.2"
