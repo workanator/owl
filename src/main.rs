@@ -2,7 +2,12 @@ extern crate nix;
 extern crate signal_hook;
 extern crate siquery;
 
+#[macro_use]
+extern crate lazy_static;
+
+use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::net::{SocketAddr, UdpSocket};
 use std::process::{self, Command};
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
@@ -13,8 +18,12 @@ use nix::unistd::Pid;
 
 const UNIX_SIGNAL_EXIT_CODE: i32 = 128;
 
-static CHILD_PID: AtomicU32 = AtomicU32::new(0);
-static LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+lazy_static! {
+    static ref CHILD_PID: AtomicU32 = AtomicU32::new(0);
+    static ref LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+    static ref OPT: HashMap<String, String> = collect_opts();
+    static ref ARGS: Vec<OsString> = collect_command_args();
+}
 
 fn main() {
     // Do nothing if no command line arguments are passed.
@@ -31,27 +40,65 @@ fn main() {
 }
 
 fn execute_command() -> i32 {
-    let mut child = Command::new(command_name())
-        .args(command_args())
-        .spawn()
-        .expect("failed to execute command");
-    CHILD_PID.store(child.id(), Ordering::Relaxed);
-    child.wait()
-        .expect("failed to retrieve command exit status")
-        .code()
-        .unwrap_or(UNIX_SIGNAL_EXIT_CODE + LAST_SIGNAL.load(Ordering::Relaxed))
+    if let Some(name) = command_name() {
+        let mut child = Command::new(name)
+            .args(command_args())
+            .spawn()
+            .expect("failed to execute command");
+        CHILD_PID.store(child.id(), Ordering::Relaxed);
+        child.wait()
+            .expect("failed to retrieve command exit status")
+            .code()
+            .unwrap_or(UNIX_SIGNAL_EXIT_CODE + LAST_SIGNAL.load(Ordering::Relaxed))
+    }
+    else {
+        0
+    }
 }
 
-fn command_name() -> String {
-    env::args().into_iter()
+fn collect_opts() -> HashMap<String, String> {
+    let opts: Vec<String> = env::args_os().into_iter()
         .skip(1)
-        .take(1)
+        .map(|x| x.to_string_lossy().into())
+        .filter(|x: &String| x.starts_with("+"))
+        .collect();
+    let mut dict: HashMap<String, String> = HashMap::new();
+
+    for opt in opts {
+        let mut lossy: String = opt.to_string();
+        let _ = lossy.remove(0); // Strip the leading +
+
+        // Find the index of collon and split to name and value
+        let parts: Vec<&str> = lossy.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            dict.insert(parts[0].into(), parts[1].into());
+        }
+        else {
+            dict.insert(parts[0].into(), "".into());
+        }
+    }
+
+    dict
+}
+
+fn collect_command_args() -> Vec<OsString> {
+    env::args_os().into_iter()
+        .skip(1)
+        .filter(|x| !x.to_string_lossy().starts_with("+"))
         .collect()
 }
 
-fn command_args() -> Vec<String> {
-    env::args().into_iter()
-        .skip(2)
+fn command_name() -> Option<OsString> {
+    ARGS.iter()
+        .take(1)
+        .map(|x| x.clone())
+        .nth(0)
+}
+
+fn command_args() -> Vec<OsString> {
+    ARGS.iter()
+        .skip(1)
+        .map(|x| x.clone())
         .collect()
 }
 
@@ -126,22 +173,37 @@ fn cast_signal(from: i32) -> Option<Signal> {
 }
 
 fn deliver_state() {
+    // Find available port
+    let port = get_available_port();
+    if port.is_none() {
+        return;
+    }
+
     // Create UDP socket
-    let local_addr = SocketAddr::from(([127, 0, 0, 1], 3400));
+    let local_addr = SocketAddr::from(([0, 0, 0, 0], port.unwrap()));
     if let Ok(socket) = UdpSocket::bind(&local_addr) {
         // Try to connect to remote listener
         let remote_addr = "127.0.0.1:9090";
-        if socket.connect(remote_addr).is_err() {
-            return;
-        }
+        //if socket.connect(remote_addr).is_err() {
+        //    return;
+        //}
 
         // Start sending notifications periodically when child PID is defined
         loop {
             let pid = CHILD_PID.load(Ordering::Relaxed);
             if pid > 0 {
                 let info = read_process_info(pid);
-                let msg = format!("{}||{}||{}||{}", process::id(), pid, info.name, info.state);
-                let _ = socket.send(msg.as_ref());
+
+                // Get command name from option or from command line
+                let cmd_name: String = if let Some(v) = OPT.get("Name") {
+                    v.clone()
+                }
+                else {
+                    info.name
+                };
+
+                let msg = format!("{}||{}||{}||{}", process::id(), pid, cmd_name, info.state);
+                let _ = socket.send_to(msg.as_ref(), remote_addr);
                 thread::sleep(time::Duration::from_secs(1));
             }
         }
@@ -150,4 +212,15 @@ fn deliver_state() {
 
 fn read_process_info(id: u32) -> siquery::tables::ProcessesRow {
     siquery::tables::ProcessesRow::gen_processes_row(format!("{}", id).as_str())
+}
+
+fn port_is_available(port: u16) -> bool {
+    match UdpSocket::bind(("0.0.0.0", port)) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
+fn get_available_port() -> Option<u16> {
+    (1025..65535).find(|port| port_is_available(*port))
 }
