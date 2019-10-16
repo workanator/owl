@@ -173,54 +173,46 @@ fn cast_signal(from: i32) -> Option<Signal> {
 }
 
 fn deliver_state() {
-    // Find available port
-    let port = get_available_port();
-    if port.is_none() {
-        return;
+    // Try to connect to remote listener
+    let mut remote_host = OPT.get("Host").unwrap_or(&"".to_owned()).clone();
+    if remote_host.len() == 0 {
+        remote_host = "0.0.0.0".to_owned();
     }
 
-    // Create UDP socket
-    let local_addr = SocketAddr::from(([0, 0, 0, 0], port.unwrap()));
-    if let Ok(socket) = UdpSocket::bind(&local_addr) {
-        // Try to connect to remote listener
-        let remote_addr = "127.0.0.1:9090";
-        //if socket.connect(remote_addr).is_err() {
-        //    return;
-        //}
+    let mut remote_port = OPT.get("Port").unwrap_or(&"".to_owned()).clone();
+    if remote_port.len() == 0 {
+        remote_port = "39576".to_owned();
+    }
 
-        // Start sending notifications periodically when child PID is defined
-        loop {
-            let pid = CHILD_PID.load(Ordering::Relaxed);
-            if pid > 0 {
-                let info = read_process_info(pid);
+    let remote_addr = format!("{}:{}", remote_host, remote_port);
 
-                // Get command name from option or from command line
-                let cmd_name: String = if let Some(v) = OPT.get("Name") {
-                    v.clone()
-                }
-                else {
-                    info.name
-                };
+    // Start sending notifications periodically when child PID is defined
+    loop {
+        let pid = CHILD_PID.load(Ordering::Relaxed);
+        if pid > 0 {
+            let info = read_process_info(pid);
 
-                let msg = format!("{}||{}||{}||{}", process::id(), pid, cmd_name, info.state);
-                let _ = socket.send_to(msg.as_ref(), remote_addr);
-                thread::sleep(time::Duration::from_secs(1));
+            // Get command name from option or from command line
+            let cmd_name: String = if let Some(v) = OPT.get("Name") {
+                v.clone()
             }
+            else {
+                info.name
+            };
+
+            // Make temp UDP socket with OS assigned port and send message
+            let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
+            if let Ok(socket) = UdpSocket::bind(&local_addr) {
+                let msg = format!("{}||{}||{}||{}", process::id(), pid, cmd_name, info.state);
+                let _ = socket.send_to(msg.as_ref(), remote_addr.clone());
+            }
+
+            // Slee a little before the next delivery
+            thread::sleep(time::Duration::from_secs(1));
         }
     }
 }
 
 fn read_process_info(id: u32) -> siquery::tables::ProcessesRow {
     siquery::tables::ProcessesRow::gen_processes_row(format!("{}", id).as_str())
-}
-
-fn port_is_available(port: u16) -> bool {
-    match UdpSocket::bind(("0.0.0.0", port)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
-}
-
-fn get_available_port() -> Option<u16> {
-    (1025..65535).find(|port| port_is_available(*port))
 }
