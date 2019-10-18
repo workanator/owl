@@ -1,6 +1,7 @@
 extern crate nix;
 extern crate signal_hook;
 extern crate siquery;
+extern crate toml;
 
 #[macro_use]
 extern crate lazy_static;
@@ -8,6 +9,8 @@ extern crate lazy_static;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
+use std::fs;
+use std::io::{Read};
 use std::net::{SocketAddr, UdpSocket};
 use std::process::{self, Command};
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
@@ -57,24 +60,46 @@ fn execute_command() -> i32 {
 }
 
 fn collect_opts() -> HashMap<String, String> {
+    let mut dict: HashMap<String, String> = HashMap::new();
+
+    // Collect options from command line arguments
     let opts: Vec<String> = env::args_os().into_iter()
         .skip(1)
         .map(|x| x.to_string_lossy().into())
         .filter(|x: &String| x.starts_with("+"))
         .collect();
-    let mut dict: HashMap<String, String> = HashMap::new();
 
     for opt in opts {
         let mut lossy: String = opt.to_string();
         let _ = lossy.remove(0); // Strip the leading +
 
-        // Find the index of collon and split to name and value
+        // Find the index of colon and split to name and value
         let parts: Vec<&str> = lossy.splitn(2, ':').collect();
         if parts.len() == 2 {
             dict.insert(parts[0].into(), parts[1].into());
         }
         else {
             dict.insert(parts[0].into(), "".into());
+        }
+    }
+
+    // Collect options from configuration file
+    if let Some(conf) = read_config_content(dict.get("Conf")) {
+        if let Some(conf) = conf.get("watch") {
+            if let Some(watch) = conf.as_table() {
+                for entry in watch.into_iter() {
+                    if dict.get(entry.0).is_none() {
+                        match entry.1 {
+                            toml::Value::String(v) => dict.insert(entry.0.to_string(), v.to_string()),
+                            toml::Value::Integer(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
+                            toml::Value::Float(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
+                            toml::Value::Boolean(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
+                            toml::Value::Datetime(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
+                            _ => None
+                        };
+                    }
+                }
+            }
         }
     }
 
@@ -215,4 +240,33 @@ fn deliver_state() {
 
 fn read_process_info(id: u32) -> siquery::tables::ProcessesRow {
     siquery::tables::ProcessesRow::gen_processes_row(format!("{}", id).as_str())
+}
+
+fn read_file_contents<S: Into<String>>(path: S) -> Option<toml::Value> {
+    match fs::File::open(path.into()) {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            if file.read_to_string(&mut contents).is_ok() {
+                match toml::Value::try_from(contents) {
+                    Ok(value) => Some(value),
+                    Err(_) => None
+                }
+            }
+            else {
+                None
+            }
+        },
+        _ => None
+    }
+}
+
+fn read_config_content(explicit_path: Option<&String>) -> Option<toml::Value> {
+    if let Some(path) = explicit_path {
+        read_file_contents(path)
+    }
+    else {
+        read_file_contents("owl.toml")
+            .or(read_file_contents("/etc/owl/owl.toml"))
+            .or(read_file_contents("/etc/owl.toml"))
+    }
 }
