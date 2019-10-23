@@ -1,6 +1,6 @@
 extern crate nix;
 extern crate signal_hook;
-extern crate siquery;
+extern crate procinfo;
 extern crate toml;
 
 #[macro_use]
@@ -18,6 +18,7 @@ use std::thread;
 use std::time;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use procinfo::pid::{stat, Stat};
 
 const EMPTY_STR: &str = "";
 const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
@@ -221,21 +222,21 @@ fn deliver_state() {
     loop {
         let pid = CHILD_PID.load(Ordering::Relaxed);
         if pid > 0 {
-            let info = read_process_info(pid);
+            if let Some(info) = read_process_info(pid) {
+                // Get command name from option or from command line
+                let cmd_name: String = if let Some(v) = OPT.get("Name") {
+                    v.clone()
+                }
+                else {
+                    info.command
+                };
 
-            // Get command name from option or from command line
-            let cmd_name: String = if let Some(v) = OPT.get("Name") {
-                v.clone()
-            }
-            else {
-                info.name
-            };
-
-            // Make temp UDP socket with OS assigned port and send message
-            let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
-            if let Ok(socket) = UdpSocket::bind(&local_addr) {
-                let msg = format!("{}||{}||{}||{}", process::id(), pid, cmd_name, info.state);
-                let _ = socket.send_to(msg.as_ref(), remote_addr.clone());
+                // Make temp UDP socket with OS assigned port and send message
+                let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
+                if let Ok(socket) = UdpSocket::bind(&local_addr) {
+                    let msg = format!("{}||{}||{}||{:?}", process::id(), pid, cmd_name, info.state);
+                    let _ = socket.send_to(msg.as_ref(), remote_addr.clone());
+                }
             }
 
             // Slee a little before the next delivery
@@ -244,8 +245,11 @@ fn deliver_state() {
     }
 }
 
-fn read_process_info(id: u32) -> siquery::tables::ProcessesRow {
-    siquery::tables::ProcessesRow::gen_processes_row(format!("{}", id).as_str())
+fn read_process_info(id: u32) -> Option<Stat> {
+    match stat(id as i32) {
+        Ok(info) => Some(info),
+        Err(_) => None,
+    }
 }
 
 fn read_file_contents<S: Into<String>>(path: S) -> Option<toml::Value> {
