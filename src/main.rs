@@ -19,6 +19,12 @@ use std::time;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
+const EMPTY_STR: &str = "";
+const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
+const DEFAULT_REMOTE_PORT: &str = "39576";
+const CONF_LOCATION_CWD: &str = "owl.toml";
+const CONF_LOCATION_ETC: &str = "/etc/owl.toml";
+const CONF_LOCATION_ETC_OWL: &str = "/etc/owl/owl.toml";
 const UNIX_SIGNAL_EXIT_CODE: i32 = 128;
 
 lazy_static! {
@@ -128,7 +134,7 @@ fn command_args() -> Vec<OsString> {
 }
 
 fn listen_signals() {
-    let signals = signal_hook::iterator::Signals::new(target_signals())
+    let signals = signal_hook::iterator::Signals::new(allowed_signals())
         .expect("failed to setup signal listener");
     for s in signals.forever() {
         // Save the last signal caught
@@ -144,7 +150,7 @@ fn listen_signals() {
     }
 }
 
-fn target_signals() -> Vec<i32> {
+fn allowed_signals() -> Vec<i32> {
     let all = vec!(
         signal_hook::SIGABRT,
         signal_hook::SIGALRM,
@@ -199,14 +205,14 @@ fn cast_signal(from: i32) -> Option<Signal> {
 
 fn deliver_state() {
     // Try to connect to remote listener
-    let mut remote_host = OPT.get("Host").unwrap_or(&"".to_owned()).clone();
+    let mut remote_host = OPT.get("Host").unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_host.len() == 0 {
-        remote_host = "0.0.0.0".to_owned();
+        remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
-    let mut remote_port = OPT.get("Port").unwrap_or(&"".to_owned()).clone();
+    let mut remote_port = OPT.get("Port").unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_port.len() == 0 {
-        remote_port = "39576".to_owned();
+        remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
 
     let remote_addr = format!("{}:{}", remote_host, remote_port);
@@ -265,8 +271,8 @@ fn read_config_content(explicit_path: Option<&String>) -> Option<toml::Value> {
         read_file_contents(path)
     }
     else {
-        read_file_contents("owl.toml")
-            .or(read_file_contents("/etc/owl/owl.toml"))
-            .or(read_file_contents("/etc/owl.toml"))
+        read_file_contents(CONF_LOCATION_CWD)
+            .or(read_file_contents(CONF_LOCATION_ETC_OWL))
+            .or(read_file_contents(CONF_LOCATION_ETC))
     }
 }
