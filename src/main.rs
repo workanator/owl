@@ -247,7 +247,7 @@ fn read_file_contents<S: Into<String>>(path: S) -> Option<toml::Value> {
         Ok(mut file) => {
             let mut contents = String::new();
             if file.read_to_string(&mut contents).is_ok() {
-                match toml::Value::try_from(contents) {
+                match contents.parse::<toml::Value>() {
                     Ok(value) => Some(value),
                     Err(_) => None
                 }
