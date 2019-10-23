@@ -1,3 +1,12 @@
+///
+/// Supported options:
+/// 
+/// - `Conf` is the location of the configuration file.
+/// - `Host` is the host address to delivert state to.
+/// - `Port` is the port to deliver state to.
+/// - `Delay` is the delay between deliveries in milliseconds.
+///
+
 extern crate nix;
 extern crate signal_hook;
 extern crate procinfo;
@@ -23,6 +32,8 @@ use procinfo::pid::{stat, Stat};
 const EMPTY_STR: &str = "";
 const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
 const DEFAULT_REMOTE_PORT: &str = "39576";
+const DEFAULT_DELIVERY_DELAY: &str = "1000";
+const DEFAULT_DELIVERY_DELAY_MILLIS: u64 = 1000;
 const CONF_LOCATION_CWD: &str = "owl.toml";
 const CONF_LOCATION_ETC: &str = "/etc/owl.toml";
 const CONF_LOCATION_ETC_OWL: &str = "/etc/owl/owl.toml";
@@ -205,16 +216,25 @@ fn cast_signal(from: i32) -> Option<Signal> {
 }
 
 fn deliver_state() {
-    // Try to connect to remote listener
-    let mut remote_host = OPT.get("Host").unwrap_or(&EMPTY_STR.to_owned()).clone();
+    // Read delivery configuration and use defaults on missing options.
+    let mut remote_host = OPT.get("Host")
+        .unwrap_or(&EMPTY_STR.to_owned())
+        .clone();
     if remote_host.len() == 0 {
         remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
-    let mut remote_port = OPT.get("Port").unwrap_or(&EMPTY_STR.to_owned()).clone();
+    let mut remote_port = OPT.get("Port")
+        .unwrap_or(&EMPTY_STR.to_owned())
+        .clone();
     if remote_port.len() == 0 {
         remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
+
+    let delay = OPT.get("Delay")
+        .unwrap_or(&DEFAULT_DELIVERY_DELAY.to_owned())
+        .parse::<u64>()
+        .unwrap_or(DEFAULT_DELIVERY_DELAY_MILLIS);
 
     let remote_addr = format!("{}:{}", remote_host, remote_port);
 
@@ -240,7 +260,7 @@ fn deliver_state() {
             }
 
             // Slee a little before the next delivery
-            thread::sleep(time::Duration::from_secs(1));
+            thread::sleep(time::Duration::from_millis(delay));
         }
     }
 }
