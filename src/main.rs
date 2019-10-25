@@ -1,34 +1,52 @@
 ///
-/// Supported options:
-/// 
-/// - `Conf` is the location of the configuration file.
-/// - `Host` is the host address to delivert state to.
-/// - `Port` is the port to deliver state to.
-/// - `Delay` is the delay between deliveries in milliseconds.
+/// The tool wraps command in child process and sends it's state periodically
+/// over UDP.
 ///
-
+/// The usage is `owl [OPTS] command [ARGS]` where `[OPTS]` are tool options
+/// and `[ARGS]` are command arguments passed without any modification.
+///
+/// E.g. `owl +Host:127.0.0.1 +Port:9090 rsync -avz /home/user root@192.168.56.102:/home`.
+/// 
+/// Shell scripts can be wrapped as well with modification of shebang, e.g.
+/// 
+/// ```shell
+/// #!/usr/bin/env owl +Name:Awesome_Job bash
+/// ...commands...
+/// ```
+///
+/// The tool accepts options which have form of `+Name:value` where `Name` is the name
+/// of the option, case is sensitive, and `value` is the value.
+///
+/// Supported options:
+///
+/// - `Conf` is the location of the configuration file, e.g. `+Conf:/usr/local/owl.conf`.
+/// - `Host` is the host address to delivert state to, e.g. `+Host:192.168.0.90`.
+/// - `Port` is the port to deliver state to, e.g. `+Port:20304`.
+/// - `Delay` is the delay between deliveries in milliseconds, e.g. `+Delay:10000`.
+///
 extern crate nix;
-extern crate signal_hook;
 extern crate procinfo;
+extern crate signal_hook;
 extern crate toml;
 
 #[macro_use]
 extern crate lazy_static;
 
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
+use procinfo::pid::{stat, Stat};
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{Read};
+use std::io::Read;
 use std::net::{SocketAddr, UdpSocket};
 use std::process::{self, Command};
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::thread;
 use std::time;
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
-use procinfo::pid::{stat, Stat};
 
+// Defaults and constants
 const EMPTY_STR: &str = "";
 const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
 const DEFAULT_REMOTE_PORT: &str = "39576";
@@ -40,9 +58,16 @@ const CONF_LOCATION_ETC_OWL: &str = "/etc/owl/owl.toml";
 const UNIX_SIGNAL_EXIT_CODE: i32 = 128;
 
 lazy_static! {
+    // The id of the process which run the command.
     static ref CHILD_PID: AtomicU32 = AtomicU32::new(0);
+
+    // The last signal caught.
     static ref LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+    // The collection of tool options.
     static ref OPT: HashMap<String, String> = collect_opts();
+
+    // The collection of command line arguments of the command.
     static ref ARGS: Vec<OsString> = collect_command_args();
 }
 
@@ -60,6 +85,11 @@ fn main() {
     std::process::exit(execute_command());
 }
 
+///
+/// Start the command executing.
+/// By default STDIN, STDOUT, and STDERR becomes standats inputs
+/// and outputs for the command process.
+///
 fn execute_command() -> i32 {
     if let Some(name) = command_name() {
         let mut child = Command::new(name)
@@ -67,21 +97,28 @@ fn execute_command() -> i32 {
             .spawn()
             .expect("failed to execute command");
         CHILD_PID.store(child.id(), Ordering::Relaxed);
-        child.wait()
+        child
+            .wait()
             .expect("failed to retrieve command exit status")
             .code()
             .unwrap_or(UNIX_SIGNAL_EXIT_CODE + LAST_SIGNAL.load(Ordering::Relaxed))
-    }
-    else {
+    } else {
         0
     }
 }
 
+///
+/// Collect the tool options from the command line and from the configuration file
+/// if it exists.
+/// Options passed within the command line has the biggest priority
+/// and rewrite the similar options from the configuration file.
+///
 fn collect_opts() -> HashMap<String, String> {
     let mut dict: HashMap<String, String> = HashMap::new();
 
     // Collect options from command line arguments
-    let opts: Vec<String> = env::args_os().into_iter()
+    let opts: Vec<String> = env::args_os()
+        .into_iter()
         .skip(1)
         .map(|x| x.to_string_lossy().into())
         .filter(|x: &String| x.starts_with("+"))
@@ -95,8 +132,7 @@ fn collect_opts() -> HashMap<String, String> {
         let parts: Vec<&str> = lossy.splitn(2, ':').collect();
         if parts.len() == 2 {
             dict.insert(parts[0].into(), parts[1].into());
-        }
-        else {
+        } else {
             dict.insert(parts[0].into(), "".into());
         }
     }
@@ -108,12 +144,22 @@ fn collect_opts() -> HashMap<String, String> {
                 for entry in watch.into_iter() {
                     if dict.get(entry.0).is_none() {
                         match entry.1 {
-                            toml::Value::String(v) => dict.insert(entry.0.to_string(), v.to_string()),
-                            toml::Value::Integer(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
-                            toml::Value::Float(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
-                            toml::Value::Boolean(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
-                            toml::Value::Datetime(v) => dict.insert(entry.0.to_string(), format!("{}", v)),
-                            _ => None
+                            toml::Value::String(v) => {
+                                dict.insert(entry.0.to_string(), v.to_string())
+                            }
+                            toml::Value::Integer(v) => {
+                                dict.insert(entry.0.to_string(), format!("{}", v))
+                            }
+                            toml::Value::Float(v) => {
+                                dict.insert(entry.0.to_string(), format!("{}", v))
+                            }
+                            toml::Value::Boolean(v) => {
+                                dict.insert(entry.0.to_string(), format!("{}", v))
+                            }
+                            toml::Value::Datetime(v) => {
+                                dict.insert(entry.0.to_string(), format!("{}", v))
+                            }
+                            _ => None,
                         };
                     }
                 }
@@ -124,27 +170,35 @@ fn collect_opts() -> HashMap<String, String> {
     dict
 }
 
+///
+/// Strip all `+<Name>:<Value>` arguments and return others.
+///
 fn collect_command_args() -> Vec<OsString> {
-    env::args_os().into_iter()
+    env::args_os()
+        .into_iter()
         .skip(1)
         .filter(|x| !x.to_string_lossy().starts_with("+"))
         .collect()
 }
 
+///
+/// Get the name of the command the child process run.
+///
 fn command_name() -> Option<OsString> {
-    ARGS.iter()
-        .take(1)
-        .map(|x| x.clone())
-        .nth(0)
+    ARGS.iter().take(1).map(|x| x.clone()).nth(0)
 }
 
+///
+/// Get the list of command line arguments of the child process.
+///
 fn command_args() -> Vec<OsString> {
-    ARGS.iter()
-        .skip(1)
-        .map(|x| x.clone())
-        .collect()
+    ARGS.iter().skip(1).map(|x| x.clone()).collect()
 }
 
+///
+/// Listen for incoming OS signal in the infinite loop.
+/// All signal caught are redirected as-is to the child process.
+///
 fn listen_signals() {
     let signals = signal_hook::iterator::Signals::new(allowed_signals())
         .expect("failed to setup signal listener");
@@ -162,8 +216,12 @@ fn listen_signals() {
     }
 }
 
+///
+/// Make the list of all possible allowed signals
+/// which the tool can subscribe for.
+///
 fn allowed_signals() -> Vec<i32> {
-    let all = vec!(
+    let all = vec![
         signal_hook::SIGABRT,
         signal_hook::SIGALRM,
         signal_hook::SIGBUS,
@@ -186,7 +244,7 @@ fn allowed_signals() -> Vec<i32> {
         signal_hook::SIGUSR1,
         signal_hook::SIGUSR2,
         signal_hook::SIGWINCH,
-    );
+    ];
 
     let mut interest = Vec::new();
     for s in all {
@@ -206,32 +264,35 @@ fn allowed_signals() -> Vec<i32> {
     interest
 }
 
+///
+/// Convert signal from the numeric representation `from` into `Signal` type
+/// if possible.
+///
 fn cast_signal(from: i32) -> Option<Signal> {
     if let Ok(sig) = Signal::from_c_int(from) {
         Some(sig)
-    }
-    else {
+    } else {
         None
     }
 }
 
+///
+/// Deliver process stats periodically in the infinite loop.
+///
 fn deliver_state() {
     // Read delivery configuration and use defaults on missing options.
-    let mut remote_host = OPT.get("Host")
-        .unwrap_or(&EMPTY_STR.to_owned())
-        .clone();
+    let mut remote_host = OPT.get("Host").unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_host.len() == 0 {
         remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
-    let mut remote_port = OPT.get("Port")
-        .unwrap_or(&EMPTY_STR.to_owned())
-        .clone();
+    let mut remote_port = OPT.get("Port").unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_port.len() == 0 {
         remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
 
-    let delay = OPT.get("Delay")
+    let delay = OPT
+        .get("Delay")
         .unwrap_or(&DEFAULT_DELIVERY_DELAY.to_owned())
         .parse::<u64>()
         .unwrap_or(DEFAULT_DELIVERY_DELAY_MILLIS);
@@ -243,28 +304,46 @@ fn deliver_state() {
         let pid = CHILD_PID.load(Ordering::Relaxed);
         if pid > 0 {
             if let Some(info) = read_process_info(pid) {
-                // Get command name from option or from command line
-                let cmd_name: String = if let Some(v) = OPT.get("Name") {
-                    v.clone()
-                }
-                else {
-                    info.command
-                };
-
-                // Make temp UDP socket with OS assigned port and send message
-                let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
-                if let Ok(socket) = UdpSocket::bind(&local_addr) {
-                    let msg = format!("{}||{}||{}||{:?}", process::id(), pid, cmd_name, info.state);
-                    let _ = socket.send_to(msg.as_ref(), remote_addr.clone());
-                }
+                send_state(remote_addr.clone(), info);
             }
 
-            // Slee a little before the next delivery
+            // Sleep a little before the next delivery
             thread::sleep(time::Duration::from_millis(delay));
         }
     }
 }
 
+///
+/// Send the stat of the process to the remote listener.
+/// The send is done over UDP socket which is created with a random
+/// port.
+///
+fn send_state(remote_addr: String, stat: Stat) {
+    // Make temp UDP socket with OS assigned port and send message
+    let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
+    if let Ok(socket) = UdpSocket::bind(&local_addr) {
+        // Get command name from option or from command line
+        let cmd_name: String = if let Some(v) = OPT.get("Name") {
+            v.clone()
+        } else {
+            stat.command
+        };
+
+        let msg = format!(
+            "{}||{}||{}||{:?}",
+            process::id(),
+            stat.pid,
+            cmd_name,
+            stat.state
+        );
+        let _ = socket.send_to(msg.as_ref(), remote_addr);
+    }
+}
+
+///
+/// Read stats of the process with `id` using `procinfo` crate.
+/// On success stats returned or `None` otherwise.
+///
 fn read_process_info(id: u32) -> Option<Stat> {
     match stat(id as i32) {
         Ok(info) => Some(info),
@@ -272,6 +351,11 @@ fn read_process_info(id: u32) -> Option<Stat> {
     }
 }
 
+///
+/// Read content of the file with `path` given. If the read is successful
+/// the content is treated as toml and parsed. On any error, from reading to parsing,
+/// `None` is returned.
+///
 fn read_file_contents<S: Into<String>>(path: S) -> Option<toml::Value> {
     match fs::File::open(path.into()) {
         Ok(mut file) => {
@@ -279,22 +363,25 @@ fn read_file_contents<S: Into<String>>(path: S) -> Option<toml::Value> {
             if file.read_to_string(&mut contents).is_ok() {
                 match contents.parse::<toml::Value>() {
                     Ok(value) => Some(value),
-                    Err(_) => None
+                    Err(_) => None,
                 }
-            }
-            else {
+            } else {
                 None
             }
-        },
-        _ => None
+        }
+        _ => None,
     }
 }
 
+///
+/// Search for the configuration file and read it.
+/// If `explicit_path` is given then only that file is tried to be read.
+/// Otherwise the configuration file is searched in known locations.
+///
 fn read_config_content(explicit_path: Option<&String>) -> Option<toml::Value> {
     if let Some(path) = explicit_path {
         read_file_contents(path)
-    }
-    else {
+    } else {
         read_file_contents(CONF_LOCATION_CWD)
             .or(read_file_contents(CONF_LOCATION_ETC_OWL))
             .or(read_file_contents(CONF_LOCATION_ETC))
