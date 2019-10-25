@@ -23,8 +23,10 @@ of the option, case is sensitive, and `value` is the value.
 
 ## Supported Options
 
-* `Conf` is the location of the configuration file, e.g. `+Conf:/usr/local/owl.conf`
-* `Host` is the host address to delivert state to, e.g. `+Host:192.168.0.90`
-* `Port` is the port to deliver state to, e.g. `+Port:20304`
-* `Delay` is the delay between deliveries in milliseconds, e.g. `+Delay:10000`
+| Name | Description | Example |
+| :--: | :---------- | :------ |
+| `Conf` | The location of the configuration file. | `+Conf:/usr/local/owl.conf` |
+| `Host` | The host address to delivert state to. | `+Host:192.168.0.90` |
+| `Port` | The port to deliver state to. | `+Port:20304` |
+| `Delay` | The delay between deliveries in milliseconds. | `+Delay:10000` |
 
