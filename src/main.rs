@@ -6,9 +6,9 @@
 /// and `[ARGS]` are command arguments passed without any modification.
 ///
 /// E.g. `owl +Host:127.0.0.1 +Port:9090 rsync -avz /home/user root@192.168.56.102:/home`.
-/// 
+///
 /// Shell scripts can be wrapped as well with modification of shebang, e.g.
-/// 
+///
 /// ```shell
 /// #!/usr/bin/env owl +Name:Awesome_Job bash
 /// ...commands...
@@ -48,6 +48,11 @@ use std::time;
 
 // Defaults and constants
 const EMPTY_STR: &str = "";
+const SECTION_WATCH: &str = "watch";
+const OPT_CONF: &str = "Conf";
+const OPT_HOST: &str = "Host";
+const OPT_PORT: &str = "Port";
+const OPT_NAME: &str = "Name";
 const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
 const DEFAULT_REMOTE_PORT: &str = "39576";
 const DEFAULT_DELIVERY_DELAY: &str = "1000";
@@ -56,6 +61,7 @@ const CONF_LOCATION_CWD: &str = "owl.toml";
 const CONF_LOCATION_ETC: &str = "/etc/owl.toml";
 const CONF_LOCATION_ETC_OWL: &str = "/etc/owl/owl.toml";
 const UNIX_SIGNAL_EXIT_CODE: i32 = 128;
+const SUCCESS: i32 = 0;
 
 lazy_static! {
     // The id of the process which run the command.
@@ -103,7 +109,7 @@ fn execute_command() -> i32 {
             .code()
             .unwrap_or(UNIX_SIGNAL_EXIT_CODE + LAST_SIGNAL.load(Ordering::Relaxed))
     } else {
-        0
+        SUCCESS
     }
 }
 
@@ -138,8 +144,8 @@ fn collect_opts() -> HashMap<String, String> {
     }
 
     // Collect options from configuration file
-    if let Some(conf) = read_config_content(dict.get("Conf")) {
-        if let Some(conf) = conf.get("watch") {
+    if let Some(conf) = read_config_content(dict.get(OPT_CONF)) {
+        if let Some(conf) = conf.get(SECTION_WATCH) {
             if let Some(watch) = conf.as_table() {
                 for entry in watch.into_iter() {
                     if dict.get(entry.0).is_none() {
@@ -281,12 +287,12 @@ fn cast_signal(from: i32) -> Option<Signal> {
 ///
 fn deliver_state() {
     // Read delivery configuration and use defaults on missing options.
-    let mut remote_host = OPT.get("Host").unwrap_or(&EMPTY_STR.to_owned()).clone();
+    let mut remote_host = OPT.get(OPT_HOST).unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_host.len() == 0 {
         remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
-    let mut remote_port = OPT.get("Port").unwrap_or(&EMPTY_STR.to_owned()).clone();
+    let mut remote_port = OPT.get(OPT_PORT).unwrap_or(&EMPTY_STR.to_owned()).clone();
     if remote_port.len() == 0 {
         remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
@@ -323,7 +329,7 @@ fn send_state(remote_addr: String, stat: Stat) {
     let local_addr = SocketAddr::from(([0, 0, 0, 0], 0));
     if let Ok(socket) = UdpSocket::bind(&local_addr) {
         // Get command name from option or from command line
-        let cmd_name: String = if let Some(v) = OPT.get("Name") {
+        let cmd_name: String = if let Some(v) = OPT.get(OPT_NAME) {
             v.clone()
         } else {
             stat.command
