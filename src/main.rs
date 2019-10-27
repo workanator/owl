@@ -48,6 +48,8 @@ use std::time;
 
 // Defaults and constants
 const EMPTY_STR: &str = "";
+const OPTION_START: char = '+';
+const OPTION_DELIMITER: char = ':';
 const SECTION_WATCH: &str = "watch";
 const OPT_CONF: &str = "Conf";
 const OPT_HOST: &str = "Host";
@@ -125,10 +127,9 @@ fn collect_opts() -> HashMap<String, String> {
 
     // Collect options from command line arguments
     let opts: Vec<String> = env::args_os()
-        .into_iter()
         .skip(1)
         .map(|x| x.to_string_lossy().into())
-        .filter(|x: &String| x.starts_with("+"))
+        .filter(|x: &String| x.starts_with(OPTION_START))
         .collect();
 
     for opt in opts {
@@ -136,11 +137,11 @@ fn collect_opts() -> HashMap<String, String> {
         let _ = lossy.remove(0); // Strip the leading +
 
         // Find the index of colon and split to name and value
-        let parts: Vec<&str> = lossy.splitn(2, ':').collect();
+        let parts: Vec<&str> = lossy.splitn(2, OPTION_DELIMITER).collect();
         if parts.len() == 2 {
             dict.insert(parts[0].into(), parts[1].into());
         } else {
-            dict.insert(parts[0].into(), "".into());
+            dict.insert(parts[0].into(), EMPTY_STR.into());
         }
     }
 
@@ -182,9 +183,8 @@ fn collect_opts() -> HashMap<String, String> {
 ///
 fn collect_command_args() -> Vec<OsString> {
     env::args_os()
-        .into_iter()
         .skip(1)
-        .filter(|x| !x.to_string_lossy().starts_with("+"))
+        .filter(|x| !x.to_string_lossy().starts_with(OPTION_START))
         .collect()
 }
 
@@ -192,14 +192,14 @@ fn collect_command_args() -> Vec<OsString> {
 /// Get the name of the command the child process run.
 ///
 fn command_name() -> Option<OsString> {
-    ARGS.iter().take(1).map(|x| x.clone()).nth(0)
+    ARGS.iter().take(1).cloned().nth(0)
 }
 
 ///
 /// Get the list of command line arguments of the child process.
 ///
 fn command_args() -> Vec<OsString> {
-    ARGS.iter().skip(1).map(|x| x.clone()).collect()
+    ARGS.iter().skip(1).cloned().collect()
 }
 
 ///
@@ -289,12 +289,12 @@ fn cast_signal(from: i32) -> Option<Signal> {
 fn deliver_state() {
     // Read delivery configuration and use defaults on missing options.
     let mut remote_host = OPT.get(OPT_HOST).unwrap_or(&EMPTY_STR.to_owned()).clone();
-    if remote_host.len() == 0 {
+    if remote_host.is_empty() {
         remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
     let mut remote_port = OPT.get(OPT_PORT).unwrap_or(&EMPTY_STR.to_owned()).clone();
-    if remote_port.len() == 0 {
+    if remote_port.is_empty() {
         remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
 
@@ -390,7 +390,7 @@ fn read_config_content(explicit_path: Option<&String>) -> Option<toml::Value> {
         read_file_contents(path)
     } else {
         read_file_contents(CONF_LOCATION_CWD)
-            .or(read_file_contents(CONF_LOCATION_ETC_OWL))
-            .or(read_file_contents(CONF_LOCATION_ETC))
+            .or_else(|| read_file_contents(CONF_LOCATION_ETC_OWL))
+            .or_else(|| read_file_contents(CONF_LOCATION_ETC))
     }
 }
