@@ -58,3 +58,26 @@ searched through the default locations in the order as shown below.
 2. `/etc/owl/owl.toml` 
 3. `/etc/owl.toml` 
 
+## Delivery Protocol
+
+The protocol used for UDP packet encoding is _SSDPD_ (_Simply Stupid Double Pipe Delimited_).
+
+The data in the packed is a number of text fields delimited with double pipe `||` . The field
+order and meaning is below.
+
+1. ID of the owl watcher process.
+2. ID of the command process.
+3. The name of the command running, or the name from the `Name` option.
+4. The state of the command process.
+
+E.g. `1280||1281||rsync||Sleeping` 
+
+## Security
+
+Some sort of _Please do not sniff UDP packets_.
+
+## Known issues
+
+* The tool cannot watch after daemon processes because they detach from the parent process
+  and it dies so the tool thinks the command finished and finishes too.
+
