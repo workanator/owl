@@ -31,7 +31,7 @@ to have OWL options visually and physically separated from other command line ar
 | `Conf` | The location of the configuration file.| `+Conf:/usr/local/owl.conf` |
 | `Host` | The host address to delivert state to.| `+Host:192.168.0.90` |
 | `Port` | The port to deliver state to.| `+Port:20304` |
-| `Delay` | The delay between deliveries in milliseconds.| `+Delay:10000` |
+| `Heartbeat` | The delay between deliveries in milliseconds.| `+Heartbeat:10000` |
 
 ## Configuration File
 
@@ -47,6 +47,7 @@ Example configuration file.
 [watch]
 Host = "192.168.20.19"
 Port = 9090
+Heartbeat = 5000
 ```
 
 The location of the configuration file to load on tool start can be set explicitly with

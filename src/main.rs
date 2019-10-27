@@ -22,7 +22,7 @@
 /// - `Conf` is the location of the configuration file, e.g. `+Conf:/usr/local/owl.conf`.
 /// - `Host` is the host address to delivert state to, e.g. `+Host:192.168.0.90`.
 /// - `Port` is the port to deliver state to, e.g. `+Port:20304`.
-/// - `Delay` is the delay between deliveries in milliseconds, e.g. `+Delay:10000`.
+/// - `Heartbeat` is the delay between deliveries in milliseconds, e.g. `+Heartbeat:10000`.
 ///
 extern crate nix;
 extern crate procinfo;
@@ -53,10 +53,11 @@ const OPT_CONF: &str = "Conf";
 const OPT_HOST: &str = "Host";
 const OPT_PORT: &str = "Port";
 const OPT_NAME: &str = "Name";
+const OPT_HEARTBEAT: &str = "Heartbeat";
 const DEFAULT_REMOTE_HOST: &str = "0.0.0.0";
 const DEFAULT_REMOTE_PORT: &str = "39576";
-const DEFAULT_DELIVERY_DELAY: &str = "1000";
-const DEFAULT_DELIVERY_DELAY_MILLIS: u64 = 1000;
+const DEFAULT_HEARTBEAT: &str = "1000";
+const DEFAULT_HEARTBEAT_MILLIS: u64 = 1000;
 const CONF_LOCATION_CWD: &str = "owl.toml";
 const CONF_LOCATION_ETC: &str = "/etc/owl.toml";
 const CONF_LOCATION_ETC_OWL: &str = "/etc/owl/owl.toml";
@@ -298,10 +299,10 @@ fn deliver_state() {
     }
 
     let delay = OPT
-        .get("Delay")
-        .unwrap_or(&DEFAULT_DELIVERY_DELAY.to_owned())
+        .get(OPT_HEARTBEAT)
+        .unwrap_or(&DEFAULT_HEARTBEAT.to_owned())
         .parse::<u64>()
-        .unwrap_or(DEFAULT_DELIVERY_DELAY_MILLIS);
+        .unwrap_or(DEFAULT_HEARTBEAT_MILLIS);
 
     let remote_addr = format!("{}:{}", remote_host, remote_port);
 
