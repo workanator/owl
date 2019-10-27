@@ -26,12 +26,12 @@ of the option, case is sensitive, and `value` is the value.
 The format of options starting with plus and delimited with colon had been choosen
 to have OWL options visually and physically separated from other command line arguments.
 
-| Name | Description | Example |
-| :--: | :---------- | :------ |
-| `Conf` | The location of the configuration file.| `+Conf:/usr/local/owl.conf` |
-| `Host` | The host address to delivert state to.| `+Host:192.168.0.90` |
-| `Port` | The port to deliver state to.| `+Port:20304` |
-| `Heartbeat` | The delay between deliveries in milliseconds.| `+Heartbeat:10000` |
+| Name | Default | Description | Example |
+| :--: | :-----: | :---------- | :------ |
+| `Conf` | | The location of the configuration file.| `+Conf:/usr/local/owl.conf` |
+| `Host` | `0.0.0.0` | The host address to delivert state to.| `+Host:192.168.0.90` |
+| `Port` | `39576` |The port to deliver state to.| `+Port:20304` |
+| `Heartbeat` | `1000` | The delay between deliveries in milliseconds.| `+Heartbeat:10000` |
 
 ## Configuration File
 
