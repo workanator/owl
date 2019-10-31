@@ -74,10 +74,14 @@ E.g. `1280||1281||rsync||Sleeping`
 
 ## Security
 
-Some sort of _Please do not sniff UDP packets_.
+Some sort of _Please do not sniff my UDP packets_.
 
 ## Known issues
 
 * The tool cannot watch after daemon processes because they detach from the parent process
   and it dies so the tool thinks the command finished and finishes too.
+
+## Licensing
+
+Licensed under [Apache 2.0 License](LICENSE)
 
