@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Andrew 'workanator' Bashkatov"]
 edition = "2018"
 
+[[bin]]
+name = "owl"
+path = "src/main.owl.rs"
+
+[[bin]]
+name = "hollow"
+path = "src/main.hollow.rs"
+
 [profile.release]
 #codegen-units = 1
 #panic         = 'abort'
