@@ -83,5 +83,5 @@ Some sort of _Please do not sniff my UDP packets_.
 
 ## Licensing
 
-Licensed under [Apache 2.0 License](LICENSE)
+Licensed under [Apache License 2.0](LICENSE)
 
