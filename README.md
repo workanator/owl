@@ -21,6 +21,10 @@ Shell scripts can be wrapped as well with modification of shebang, e.g.
 The tool accepts options which have form of `+Name:value` where `Name` is the name
 of the option, case is sensitive, and `value` is the value.
 
+## Installing
+
+The tool requires **rustc** of version **1.39** or above to successful compilcation.
+
 ## Options
 
 The format of options starting with plus and delimited with colon had been choosen

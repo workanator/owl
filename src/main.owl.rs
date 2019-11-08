@@ -63,7 +63,7 @@ use std::thread;
 use std::time;
 
 // Defaults and constants
-const EMPTY_STR: &str = "";
+const EMPTY_STR: String = String::new();
 const OPTION_START: char = '+';
 const OPTION_DELIMITER: char = ':';
 const SECTION_WATCH: &str = "watch";
@@ -157,7 +157,7 @@ fn collect_opts() -> HashMap<String, String> {
         if parts.len() == 2 {
             dict.insert(parts[0].into(), parts[1].into());
         } else {
-            dict.insert(parts[0].into(), EMPTY_STR.into());
+            dict.insert(parts[0].into(), EMPTY_STR);
         }
     }
 
@@ -304,12 +304,12 @@ fn cast_signal(from: i32) -> Option<Signal> {
 ///
 fn deliver_state() {
     // Read delivery configuration and use defaults on missing options.
-    let mut remote_host = OPT.get(OPT_HOST).unwrap_or(&EMPTY_STR.to_owned()).clone();
+    let mut remote_host = OPT.get(OPT_HOST).unwrap_or(&EMPTY_STR).clone();
     if remote_host.is_empty() {
         remote_host = DEFAULT_REMOTE_HOST.to_owned();
     }
 
-    let mut remote_port = OPT.get(OPT_PORT).unwrap_or(&EMPTY_STR.to_owned()).clone();
+    let mut remote_port = OPT.get(OPT_PORT).unwrap_or(&EMPTY_STR).clone();
     if remote_port.is_empty() {
         remote_port = DEFAULT_REMOTE_PORT.to_owned();
     }
