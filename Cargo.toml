@@ -23,6 +23,6 @@ path = "src/main.hollow.rs"
 [dependencies]
 lazy_static = "^1.4"
 signal-hook = "^0.1"
-nix         = "^0.15"
+nix         = "^0.20"
 procinfo    = "^0.4"
 toml        = "^0.5"
